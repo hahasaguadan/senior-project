@@ -1,0 +1,216 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<title>Test</title>
+ <!--導入bootstrap/jquery/dropzone.css/dropzone.js:目的為預覽上傳的圖片-->
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css">
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script> 
+<link rel="stylesheet" type="text/css" href="/static/dropzone/dropzone.css" />
+<script type="text/javascript" src="/static/dropzone/dropzone.js"></script>
+</head>
+
+<style>
+  body{
+    font-family: OCR A Std, monospace;
+  }
+  .title{
+    padding-top: 40px;
+    font-size: 50px;
+  }
+  table{
+      margin-left:auto; 
+      margin-right:auto;
+  }
+  .image {
+      margin:auto;
+      border-radius: 20px;
+      overflow: hidden;
+      width: 120px;
+      height: 120px;
+      position: relative;
+      display: block;
+      cursor: zoom-in; /*新增滑鼠移入圖片效果*/
+  }
+  
+  caption {
+      text-align:center;
+      font-size:30px;
+      font-weight: bold;
+      color:SteelBlue;
+  }
+  th { 
+      background-color: Brown;/*SteelBlue;*/
+      padding:10px;
+      border:1px solid #000;
+      color:#fff;
+  } 
+  tr:nth-of-type(2n){
+      border: 1px solid black;
+      background-color: Bisque; /*AliceBlue; */
+  }
+  td{
+      padding: 8px 8px;
+      border: 1px solid black;
+  }
+  .imgPreview {
+      display: none;
+      top: 0;
+      left: 0;
+      width: 100%; /*容器佔滿整個螢幕*/
+      height: 100%;
+      position: fixed;
+      background: rgba(0, 0, 0, 0.5);
+      cursor: zoom-out;
+  }
+  .imgPreview img {
+      z-index: 5;
+      width: 60%;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%,-50%);
+  }
+  .btn{border:0;
+  background-color:Brown;
+  color:#fff;
+  border-radius:10px;
+  cursor:pointer;}
+
+  .btn:hover{
+  color:Brown;
+  background-color:#fff;
+  border:2px Brown solid;
+}
+  
+  
+  </style>
+
+<body>
+<h1 class='title' style="text-align:center">Coffee Bean Image Classifier</h1>
+<br/><br/>
+<div class="container">
+<form method="post" class="dropzone" enctype="multipart/form-data">
+    <div class="dz-message needclick">
+        <h1>Drop files here or click to upload.</h1>
+    </div>
+</form>
+<br/><br/>
+<form style="text-align:center" method='post' action='/predict' > 
+    <button type="submit" class="btn">Predict Image</button>
+</form>
+</div>
+<br/>
+<br/>
+<br/>
+<br/>
+
+{% if data %}
+  <table style="text-align:center">
+    <caption>預測結果</caption>
+      <tr>
+        <td>非瑕疵豆數</td>
+        <td>{{good}}</td>
+      </tr>
+      <tr>
+        <td>瑕疵豆數</td>
+        <td>{{bad}}</td>
+      </tr>
+      <tr>
+        <td>瑕疵率</td>
+        <td>{{rate}}</td>
+      </tr>
+  </table>
+  <br/>
+  <br/>
+{% endif %}
+{% if data %}
+  <table style="text-align:center">
+    <tr>
+      <th>照片</th>
+      <th>名稱</th>
+      <th>正常/瑕疵</th>
+      {% if data|length > 1 %}
+      <th>照片</th>
+      <th>名稱</th>
+      <th>正常/瑕疵</th>
+      {% endif %}
+    </tr>
+    {% for i in range(0, (data|length // 2 )) %}
+      <tr>
+        <td><img class="image" src="/static/images/{{data[2*i][0]}}" ></td>
+        <td>{{data[2*i][0]}}</td>
+        <td>{{data[2*i][1]}}</td>
+        <td><img class="image" src="/static/images/{{data[2*i+1][0]}}" ></td>
+        <td>{{data[2*i+1][0]}}</td>
+        <td>{{data[2*i+1][1]}}</td>
+      </tr>
+    {% endfor %}
+    {% if data|length%2 == 1 %}
+      <tr>
+        <td><img class="image" src="/static/images/{{data[-1][0]}}" ></td>
+        <td>{{data[-1][0]}}</td>
+        <td>{{data[-1][1]}}</td>
+        {% if data|length > 1 %}
+        <td></td>
+        <td></td>
+        <td></td>
+        {% endif %}
+      </tr>
+    {% endif %}
+  </table>
+{% endif %}
+
+<div class="imgPreview">
+  <img src="#" alt="" id="imgPreview">
+</div>
+
+<script>
+var duplicate = '0'; // 判斷是否為重複照片
+Dropzone.autoDiscover = false;
+$(document).ready(function(){
+    $(".dropzone").dropzone({
+        url: '/upload',
+        addRemoveLinks: true,
+        dictRemoveFile: 'X',
+        dictResponseError: 'Server responded with {{statusCode}} code.', // 目前還不能用
+        progressBarWidth: '100%',
+        maxFilesize: 4, // 限制大小(MB)
+        maxFiles: 20, // 限制檔案數
+        dictMaxFilesExceeded: "一次最多只能上傳20个",
+        init: function() {
+            console.log('init');
+            this.on("error", function(file, errorMessage){
+                alert(errorMessage);
+                if(errorMessage == '重複的照片!')
+                    duplicate = '1';
+                    this.removeFile(file);
+            });
+        },
+        removedfile: function (file) {  // triggered when remove file button was clicked
+            var name = file.name;
+            $.ajax({  // send AJAX request to Flask to remove file
+                type:'POST',
+                url:'/deletefile',
+                data : {'name': name,'duplicate': duplicate},  // pass filename
+                success : function (data) {
+                    alert('照片已刪除')
+                }
+            }).then(duplicate = '0');
+            var _ref;
+            return (_ref = file.previewElement) != null ? _ref.parentNode.removeChild(file.previewElement) : void 0;
+        },
+    })
+});
+$(function () {
+    $('.image').on('click', function () {
+        var src = $(this).attr('src');
+        $('.imgPreview img').attr('src', src);
+        $('.imgPreview').show()
+    });
+    $('.imgPreview').on('click', function () {
+        $('.imgPreview').hide()
+    });
+})
+</script>
+</body>
+</html>
